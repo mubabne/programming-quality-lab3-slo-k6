@@ -1,0 +1,16 @@
+{
+  "name": "lab03-quality-scenarios",
+  "version": "1.0.0",
+  "description": "F.CSA313 Lab 3 local API for SLO and k6 threshold testing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
