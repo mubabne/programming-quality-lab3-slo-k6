@@ -37,3 +37,44 @@ npm start
 | Нэмэлт performance | `/report` latency | p95 < 450 мс | 20 VU, 1 минут |
 
 `/cart/add` нь локал, тооцоолол багатай endpoint тул 10 мс-ийн p95 босгыг сонгосон. `/pay` кодод 5% санамсаргүй алдаа оруулсан учраас хэлбэлзлийг багтаасан 8%-ийн босго бодитой. `/report` нь зориуд 200–400 мс саатдаг тул 450 мс нь өгөгдсөн зан төлөвийг зөвшөөрөх боловч хэт сул биш босго. Availability SLO 90% тул 2 минутын цонхны цагийн error budget нь `120 × 0.10 = 12 секунд` байна.
+
+## Туршилт ажиллуулах
+
+PowerShell дээр хоёр терминал ашиглан PASS болон зориудын FAIL тестийг ажиллуулна.
+
+```powershell
+# Терминал 1
+npm start
+
+# Терминал 2
+k6 run --no-color slo-test.js 2>&1 | Tee-Object results/pass.txt
+k6 run --no-color slo-test-fail.js 2>&1 | Tee-Object results/fail.txt
+```
+
+Chaos туршилтын controller нь серверийг босгож, тестийн 30 дахь секундэд зогсоон, 10 секундийн дараа дахин асаана. Stop/restart timestamp болон outage хугацаа `results/chaos.txt` дотор бичигдэнэ.
+
+```powershell
+node scripts/run-chaos.js
+```
+
+## Үр дүн
+
+| Туршилт | Хэмжсэн утга | Босго | Үр дүн |
+|---|---:|---:|---|
+| PASS — `/cart/add` p95 | 1.99 мс | < 10 мс | PASS |
+| PASS — `/report` p95 | 395.74 мс | < 450 мс | PASS |
+| PASS — `/pay` error rate | 5.63% | < 8% | PASS |
+| PASS — нийт checks | 98.12% | > 90% | PASS |
+| Chaos — availability | 87.75% | > 90% | FAIL |
+| Chaos — `/pay` error rate | 15.36% | < 8% | FAIL |
+| Зориудын FAIL — `/report` p95 | 397.27 мс | < 100 мс | FAIL |
+
+PASS run-ийн exit code `0`, зориудын FAIL run-ийн exit code `99` болсон. Бүтэн гаралт нь [results/pass.txt](results/pass.txt), [results/chaos.txt](results/chaos.txt), [results/fail.txt](results/fail.txt) файлуудад байна.
+
+### Chaos ба error budget
+
+Controller-ийн хэмжсэн бодит зогсолт `10.021 секунд` байсан. Нэг HTTP хүсэлт тутам нэг check хийсэн тул хүсэлтээр тооцсон availability нь `4968 / 5661 × 100 = 87.75%`. 90%-ийн SLO-д зөвшөөрөх request error budget нь `5661 × 10% = 566.1` алдаатай хүсэлт боловч бодит алдаа `693` байсан тул budget-ийг `126.9` хүсэлтээр хэтрүүлсэн. Цагаар тооцсон 12 секундийн budget дотор багтсан ч хүсэлтээр тооцсон budget хэтэрсэн.
+
+## Дүгнэлт
+
+Сценариог SLO, дараа нь яг ижил k6 threshold болгохдоо хэмжих нэгжүүдийг хооронд нь зөрүүлэхгүй байх нь хамгийн хэцүү байлаа. Хэвийн run дээр `/cart/add`-ийн p95 1.99 мс гарч, 10 мс-ийн босгыг хангаад performance SLO биелсэн. `/pay` error rate 5.63% байсан нь кодод оруулсан 5%-ийн санамсаргүй алдаатай ойролцоо бөгөөд 8%-ийн reliability босгыг давсангүй. `/report`-ийн p95 395.74 мс байсан тул 450 мс-ийн нэмэлт босго бодит зан төлөвийг зөв барьсан. Chaos run дээр availability 87.75% болж, 90%-ийн SLO-г хангаагүй нь миний эхний availability таамгийг үгүйсгэсэн. Зогсолт 10.021 секунд байсан нь цагийн 12 секундийн budget-д багтсан ч хурдан буцсан connection-refused хүсэлтүүд request budget-ийг хэтрүүлсэн. Сервер унах үед `/pay` хүсэлтүүд бас тасарсан учраас reliability threshold 15.36% болж хамт FAIL болсон. Эдгээрийг тусгаарлахын тулд серверт хүрсэн HTTP 500 хариуг custom metric-ээр, connection error-ийг availability metric-ээр тусад нь хэмжих хэрэгтэй. Зориудын FAIL run дээр `/report` p95 397.27 мс байхад 100 мс-ийн босго FAIL болж exit code 99 буцсан нь CI ийм зөрчил дээр build-ийг зогсоож чаддагийг харууллаа.
